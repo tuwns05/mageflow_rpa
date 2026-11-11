@@ -234,6 +234,68 @@ class FastRunner:
             if idx < len(lines) - 1:
                 pyautogui.press("enter")
 
+    def press_hotkey_windows(self, keys: list[str]) -> None:
+        """Nhấn tổ hợp phím qua Win32 keybd_event (tương thích hoàn toàn với phím Win, Alt+F2->Win+R, F1..F24)."""
+        norm_keys = [str(k).strip().lower() for k in keys if str(k).strip()]
+        if not norm_keys:
+            return
+        if set(norm_keys) == {"alt", "f2"}:
+            norm_keys = ["win", "r"]
+
+        if sys.platform != "win32":
+            pyautogui.hotkey(*norm_keys)
+            return
+
+        aliases = {
+            "ctrl": 17,
+            "control": 17,
+            "alt": 18,
+            "shift": 16,
+            "super": 91,
+            "win": 91,
+            "windows": 91,
+            "enter": 13,
+            "return": 13,
+            "tab": 9,
+            "esc": 27,
+            "escape": 27,
+            "space": 32,
+            "backspace": 8,
+            "delete": 46,
+            "left": 37,
+            "up": 38,
+            "right": 39,
+            "down": 40,
+            "home": 36,
+            "end": 35,
+            "pageup": 33,
+            "pagedown": 34,
+        }
+        user32 = ctypes.windll.user32
+        codes = []
+        for k in norm_keys:
+            if k in aliases:
+                codes.append(aliases[k])
+            elif len(k) == 1 and k.isascii() and k.isalnum():
+                codes.append(ord(k.upper()))
+            elif re.fullmatch(r"f([1-9]|1[0-9]|2[0-4])", k):
+                codes.append(111 + int(k[1:]))
+            else:
+                pyautogui.hotkey(*norm_keys)
+                return
+
+        try:
+            for code in codes:
+                user32.keybd_event(code, 0, 0, 0)
+        finally:
+            for code in reversed(codes):
+                user32.keybd_event(code, 0, 2, 0)
+
+        if any(k in ("enter", "return", "win", "windows") for k in norm_keys):
+            time.sleep(1.2)
+        else:
+            time.sleep(0.3)
+
     def execute_gui_action(
         self,
         gui: GUIStepPayload,
@@ -244,30 +306,29 @@ class FastRunner:
         action = gui.action_type
         if action == "click":
             pyautogui.click(target_x, target_y)
+            time.sleep(0.3)
         elif action == "double_click":
             pyautogui.doubleClick(target_x, target_y)
-            time.sleep(0.4)
+            time.sleep(0.8)
         elif action == "right_click":
             pyautogui.rightClick(target_x, target_y)
+            time.sleep(0.3)
         elif action == "type":
             if target_x > 0 or target_y > 0:
                 pyautogui.click(target_x, target_y)
                 time.sleep(0.08)
             if gui.text_input:
                 self.type_unicode_text(gui.text_input)
+            time.sleep(0.3)
         elif action == "hotkey":
             if gui.keys:
-                norm_keys = [str(k).lower() for k in gui.keys]
-                if set(norm_keys) == {"alt", "f2"}:
-                    norm_keys = ["win", "r"]
-                pyautogui.hotkey(*norm_keys)
-                if any(k in ("enter", "return", "win", "windows") for k in norm_keys):
-                    time.sleep(0.6)
+                self.press_hotkey_windows(gui.keys)
         elif action == "scroll":
             if target_x > 0 or target_y > 0:
                 pyautogui.moveTo(target_x, target_y)
             scroll_amount = int(gui.text_input or "-300")
             pyautogui.scroll(scroll_amount)
+            time.sleep(0.3)
         else:
             raise ValueError(f"Unsupported GUI action_type: {action}")
 

@@ -1,29 +1,112 @@
 {
   "version": "1.0.0",
-  "name": "Báo cáo Doanh thu Tự động",
-  "goal_prompt": "Mở bảng báo cáo doanh thu, bấm nút Xuất Excel và lưu file vào thư mục Báo cáo",
-  "created_at": "2026-11-11T14:55:54",
-  "updated_at": "2026-11-11T14:55:54",
+  "name": "AutoFlow - Mở notepad, mở 10 lần tab mới và mỗi tab",
+  "goal_prompt": "Mở notepad, mở 10 lần tab mới và mỗi tab nhập liên tục từ 1 đến 10",
+  "created_at": "2026-11-11T15:22:20",
+  "updated_at": "2026-11-11T15:25:13",
   "steps": [
     {
       "step_id": 1,
-      "description": "Bấm nút Xuất Excel trên cửa sổ phần mềm kế toán",
+      "description": "Click the dock separator area and wait for the app to open.",
       "channel": "gui",
       "gui": {
         "action_type": "click",
-        "window_title": "Excel",
+        "window_title": "MageFlow RPA — Self-Healing Hybrid Automation (FastRunner + Mage-VL-Cowork 4B)",
         "relative_coords": [
-          180,
-          95
+          -117,
+          934
         ],
         "screen_coords": [
-          380,
-          195
+          35,
+          1154
         ],
         "template_image_path": "assets/templates/step_001_tpl.png",
         "confidence_threshold": 0.85,
         "text_input": null,
         "keys": [],
+        "search_margin": 120
+      },
+      "wait_after_ms": 300,
+      "timeout_seconds": 5.0,
+      "healed_count": 0,
+      "last_healed_at": null
+    },
+    {
+      "step_id": 2,
+      "description": "Press Alt+F2, type notepad, press Enter, and wait.",
+      "channel": "gui",
+      "gui": {
+        "action_type": "hotkey",
+        "window_title": "",
+        "relative_coords": [
+          0,
+          0
+        ],
+        "screen_coords": [
+          0,
+          0
+        ],
+        "template_image_path": "",
+        "confidence_threshold": 0.85,
+        "text_input": null,
+        "keys": [
+          "alt",
+          "f2"
+        ],
+        "search_margin": 120
+      },
+      "wait_after_ms": 300,
+      "timeout_seconds": 5.0,
+      "healed_count": 0,
+      "last_healed_at": null
+    },
+    {
+      "step_id": 3,
+      "description": "Press Alt+F2, type notepad, press Enter, and wait.",
+      "channel": "gui",
+      "gui": {
+        "action_type": "type",
+        "window_title": "Run",
+        "relative_coords": [
+          0,
+          0
+        ],
+        "screen_coords": [
+          0,
+          0
+        ],
+        "template_image_path": "",
+        "confidence_threshold": 0.85,
+        "text_input": "notepad",
+        "keys": [],
+        "search_margin": 120
+      },
+      "wait_after_ms": 300,
+      "timeout_seconds": 5.0,
+      "healed_count": 0,
+      "last_healed_at": null
+    },
+    {
+      "step_id": 4,
+      "description": "Press Alt+F2, type notepad, press Enter, and wait.",
+      "channel": "gui",
+      "gui": {
+        "action_type": "hotkey",
+        "window_title": "Run",
+        "relative_coords": [
+          0,
+          0
+        ],
+        "screen_coords": [
+          0,
+          0
+        ],
+        "template_image_path": "",
+        "confidence_threshold": 0.85,
+        "text_input": null,
+        "keys": [
+          "enter"
+        ],
         "search_margin": 120
       },
       "wait_after_ms": 300,

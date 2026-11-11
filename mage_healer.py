@@ -315,6 +315,30 @@ class MageHealer:
         pil_img.thumbnail((1920, 1200))
         return pil_img
 
+    @staticmethod
+    def _prune_messages_for_vram(messages: List[Dict[str, Any]], images_to_keep: int = 1) -> None:
+        """
+        Giới hạn VRAM trên GPU 6GB bằng cách chỉ giữ lại đúng `images_to_keep` (1) ảnh chụp màn hình mới nhất
+        và rút gọn các lượt suy nghĩ (<think>) cũ của assistant.
+        """
+        seen = 0
+        for m in reversed(messages):
+            if isinstance(m.get("content"), list):
+                kept = []
+                for part in m["content"]:
+                    if part.get("type") == "image":
+                        seen += 1
+                        if seen > images_to_keep:
+                            continue
+                    kept.append(part)
+                m["content"] = kept or "[Earlier screenshot omitted]"
+
+        assistants = [m for m in messages if m.get("role") == "assistant"]
+        for m in assistants[:-4]:
+            content_str = str(m.get("content", ""))
+            line = re.search(r"^Action:.*", content_str, re.MULTILINE)
+            m["content"] = line.group(0) if line else "[Earlier action]"
+
     def respond_local(
         self,
         messages: List[Dict[str, Any]],
@@ -323,6 +347,7 @@ class MageHealer:
     ) -> str:
         """Chạy suy luận trực tiếp trên model Mage-VL-Cowork local (không qua API)."""
         self._ensure_local_model()
+        self._prune_messages_for_vram(messages, images_to_keep=1)
         torch = self._local_torch
         processor = self._local_processor
         model = self._local_model
@@ -362,9 +387,13 @@ class MageHealer:
 
         generated = ids[0, inputs["input_ids"].shape[1] :]
         out_text = processor.tokenizer.decode(generated, skip_special_tokens=True)
+        del inputs, ids, generated
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         elapsed = time.perf_counter() - t0
         self.log(
-            f"[Local Mage] Suy luận hoàn tất trong {elapsed:.2f}s ({len(generated)} tokens).",
+            f"[Local Mage] Suy luận hoàn tất trong {elapsed:.2f}s.",
             "MAGE",
         )
         return out_text
@@ -708,6 +737,8 @@ class MageHealer:
                 continue
 
             finished_all = False
+            turn_outputs: List[str] = []
+
             for call in calls:
                 if self.runner.stop_event.is_set():
                     break
@@ -729,6 +760,7 @@ class MageHealer:
                     if c_action in ("wait", "screenshot"):
                         wait_sec = min(max(float(args.get("time", 1.0)), 0.2), 10.0) if c_action == "wait" else 0.3
                         time.sleep(wait_sec)
+                        turn_outputs.append(f"Waited {wait_sec:.1f}s.")
                         continue
 
                     step_counter += 1
@@ -781,6 +813,7 @@ class MageHealer:
                             f"[RecordMode] Step #{step_counter} [GUI {mapped_action}]: {step_desc} tại ({px}, {py}) -> {tpl_rel_path}",
                             "MAGE",
                         )
+                        turn_outputs.append(f"Executed {mapped_action} at ({px}, {py}).")
 
                     elif c_action == "type":
                         text_val = str(args.get("text", ""))
@@ -804,12 +837,15 @@ class MageHealer:
                             f"[RecordMode] Step #{step_counter} [GUI type]: '{text_val}'",
                             "MAGE",
                         )
+                        turn_outputs.append(f"Typed '{text_val}'.")
 
                     elif c_action == "keypress":
                         raw_keys = args.get("keys", [])
                         if isinstance(raw_keys, str):
                             raw_keys = raw_keys.split("+")
-                        keys_list = [str(k) for k in raw_keys]
+                        keys_list = [str(k).lower() for k in raw_keys]
+                        if set(keys_list) == {"alt", "f2"}:
+                            keys_list = ["win", "r"]
                         win_title, _ = self.detect_active_window_info()
                         gui_payload = GUIStepPayload(
                             action_type="hotkey",
@@ -830,6 +866,7 @@ class MageHealer:
                             f"[RecordMode] Step #{step_counter} [GUI hotkey]: {keys_list}",
                             "MAGE",
                         )
+                        turn_outputs.append(f"Pressed keys {keys_list}.")
 
                     elif c_action == "scroll":
                         coord = args.get("coordinate", [500, 500])
@@ -858,6 +895,7 @@ class MageHealer:
                         )
                         self.runner.execute_gui_action(gui_payload, px, py)
                         self.log(f"[RecordMode] Step #{step_counter} [GUI scroll]: {scroll_y}", "MAGE")
+                        turn_outputs.append(f"Scrolled {scroll_y}.")
                     else:
                         step_counter -= 1
                         continue
@@ -867,25 +905,6 @@ class MageHealer:
                     doc.save(workflow_path)
                     if step_added_callback:
                         step_added_callback(step)
-
-                    time.sleep(0.4)
-                    new_screen = self.runner.capture_screen_bgr()
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": (
-                                        "<tool_response>Action completed. Windows state: "
-                                        f"{self.get_windows_desktop_context()}\nCurrent Windows desktop:"
-                                    ),
-                                },
-                                {"type": "image", "image": self.bgr_to_pil_thumbnail(new_screen)},
-                                {"type": "text", "text": "</tool_response>"},
-                            ],
-                        }
-                    )
 
                 elif tool_name == "bash":
                     cmd_str = str(args.get("command", "")).strip()
@@ -916,27 +935,30 @@ class MageHealer:
                         step_added_callback(step)
 
                     self.log(f"[RecordMode] Step #{step_counter} [BASH]: {cmd_str}", "MAGE")
-                    time.sleep(0.5)
-                    new_screen = self.runner.capture_screen_bgr()
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": (
-                                        f"<tool_response>{exit_info}\nWindows state: "
-                                        f"{self.get_windows_desktop_context()}\nCurrent Windows desktop:"
-                                    ),
-                                },
-                                {"type": "image", "image": self.bgr_to_pil_thumbnail(new_screen)},
-                                {"type": "text", "text": "</tool_response>"},
-                            ],
-                        }
-                    )
+                    turn_outputs.append(exit_info)
 
             if finished_all:
                 break
+
+            # Chỉ đính kèm 1 ảnh chụp màn hình mới nhất sau khi hoàn thành toàn bộ tool_call của lượt hiện tại
+            new_screen = self.runner.capture_screen_bgr()
+            summary_str = " | ".join(turn_outputs) if turn_outputs else "Action completed."
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"<tool_response>{summary_str}\nWindows state: "
+                                f"{self.get_windows_desktop_context()}\nCurrent Windows desktop:"
+                            ),
+                        },
+                        {"type": "image", "image": self.bgr_to_pil_thumbnail(new_screen)},
+                        {"type": "text", "text": "</tool_response>"},
+                    ],
+                }
+            )
 
         doc.save(workflow_path)
         self.log(f"[RecordMode] Đã lưu kịch bản gồm {len(doc.steps)} bước vào {workflow_path}", "MAGE")
