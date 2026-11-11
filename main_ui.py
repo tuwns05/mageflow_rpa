@@ -71,8 +71,8 @@ class MageFlowMainWindow(QMainWindow):
         self.healer = MageHealer(
             base_dir=self.base_dir,
             runner=self.runner,
-            api_base_url="http://127.0.0.1:8000/v1",
-            model_name="Mage-VL-Cowork-4B",
+            api_base_url="LOCAL",
+            model_name="microsoft/Mage-VL-Cowork",
             log_callback=self.emit_log,
         )
 
@@ -116,15 +116,16 @@ class MageFlowMainWindow(QMainWindow):
         main_layout.setContentsMargins(14, 14, 14, 14)
         main_layout.setSpacing(10)
 
-        # Hàng 1: Cấu hình Mage-VL-Cowork Endpoint + File kịch bản
+        # Hàng 1: Cấu hình Mage-VL-Cowork (LOCAL trực tiếp trên máy hoặc API) + File kịch bản
         endpoint_row = QHBoxLayout()
-        endpoint_row.addWidget(QLabel("Mage-VL API:"))
-        self.api_input = QLineEdit("http://127.0.0.1:8000/v1")
-        endpoint_row.addWidget(self.api_input, stretch=2)
+        endpoint_row.addWidget(QLabel("Chế độ / API:"))
+        self.api_input = QLineEdit("LOCAL")
+        self.api_input.setToolTip("Để 'LOCAL' để chạy trực tiếp model đã cài trên máy (không cần API), hoặc nhập URL http://...")
+        endpoint_row.addWidget(self.api_input, stretch=1)
 
         endpoint_row.addWidget(QLabel("Model:"))
-        self.model_input = QLineEdit("Mage-VL-Cowork-4B")
-        endpoint_row.addWidget(self.model_input, stretch=1)
+        self.model_input = QLineEdit("microsoft/Mage-VL-Cowork")
+        endpoint_row.addWidget(self.model_input, stretch=2)
 
         endpoint_row.addWidget(QLabel("API Key:"))
         self.api_key_input = QLineEdit("EMPTY")
